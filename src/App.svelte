@@ -1,82 +1,132 @@
 <script>
   export let apiUrl;
+  export let githubLink;
+  export let messages;
+
+  import About from "./components/About.svelte";
+  import Error from "./components/Error.svelte";
+  import MovieInfo from "./components/MovieInfo.svelte";
+  import LoadingMessage from "./components/LoadingMessage.svelte";
+  import NoResults from "./components/NoResults.svelte";
+  import MoviedLoadedNotification from "./components/MoviedLoadedNotification.svelte";
+
   import {
     MaterialApp,
-    ProgressCircular,
     Card,
     CardActions,
     Button,
     Icon,
-    Footer,
-    Divider,
+    AppBar,
+    ListItem,
+    Menu,
+    Dialog,
+    ProgressLinear,
   } from "svelte-materialify";
-  import { mdiCart } from "@mdi/js";
+  import { mdiCart, mdiDotsVertical } from "@mdi/js";
+  import { fade, slide } from "svelte/transition";
+
+  function sleep(time) {
+    return new Promise((resolve) => setTimeout(resolve, time));
+  }
 
   let theme = "light";
+  let message;
+
+  let waitTime = 0;
   const fetchMovies = (async () => {
+    var loadingTimeCounter = setInterval(function () {
+      waitTime++;
+      if (waitTime > 3 && waitTime < 8) {
+        message = messages.loader.subtitles[0];
+      } else if (waitTime >= 8 && waitTime < 15) {
+        message = messages.loader.subtitles[1];
+      } else if (waitTime >= 15) {
+        message = messages.loader.subtitles[2];
+      }
+    }, 1000);
     const response = await fetch(apiUrl);
+    clearInterval(loadingTimeCounter);
+    hideInfoMessage();
+
     return await response.json();
   })();
+
+  let showNotification = true;
+  let dialogShown = false;
+  const hideInfoMessage = () => {
+    setTimeout(() => {
+      showNotification = false;
+    }, 4000);
+  };
 </script>
 
 <MaterialApp {theme}>
+  <AppBar>
+    <span slot="title">Movie Tickets Finder</span>
+    <div style="flex-grow:1" />
+    <Menu right>
+      <div slot="activator">
+        <Button fab depressed>
+          <Icon path={mdiDotsVertical} />
+        </Button>
+      </div>
+      <ListItem on:click={() => (dialogShown = true)}>How it works?</ListItem>
+      <ListItem
+        ><a href={githubLink} target="_blank">Evgeny Belov on GitHub</a
+        ></ListItem
+      >
+    </Menu>
+  </AppBar>
+
+  <Dialog width="80%" class="pa-4 text-left" bind:active={dialogShown}>
+    <About />
+  </Dialog>
+
   {#await fetchMovies}
-    <div class="d-flex flex-column align-center align-content-center">
-      <h2>Oi mate, let's find you some cheap movie tickets!</h2>
-      <ProgressCircular size={40} indeterminate color="primary" />
+    <div transition:slide>
+      <LoadingMessage title={messages.loader.title} subtitle={message} />
+      <ProgressLinear indeterminate color="primary" />
     </div>
   {:then data}
-    <div class="d-flex flex-column align-center align-content-center">
-      <h2>Here are your cheapest tickets. Enjoy!</h2>
-    </div>
-    <Divider />
-    <div class="d-flex flex-wrap justify-center mt-4">
-      {#each data.movies as movie}
-        <Card style="max-width:500px" class="pa-4 ma-4">
-          <div class=" text-center">
-            <img
-              src={movie.poster}
-              alt="PosterImage"
-              onerror="this.src='https://via.placeholder.com/300x450?text=No+poster'"
-            />
-            <h4>{movie.title}</h4>
-            <p style="color:gray;">
-              {movie.year} | {movie.country} | {movie.rated}
-            </p>
+    {#if data.movies.length === 0}
+      <NoResults title={messages.notifications.noResults} />
+    {:else}
+      {#if showNotification}
+        <MoviedLoadedNotification
+          title={messages.notifications.moviesLoadedTitle}
+        />
+      {/if}
+      <div class="d-flex flex-wrap justify-center mt-4" in:fade>
+        {#each data.movies as movie (movie.id)}
+          <div in:fade={{ duration: 500 }}>
+            <Card style="max-width:500px" class="pa-4 ma-4">
+              <div class="text-center">
+                <img
+                  src={movie.poster}
+                  alt="PosterImage"
+                  onerror="this.src='https://via.placeholder.com/300x450?text=No+poster'"
+                />
+                <h4 class="movie-title">{movie.title}</h4>
+                <p style="color:gray;">
+                  {movie.country} | {movie.rated} | ⭐ {movie.rating}
+                  /10
+                </p>
+              </div>
+              <MovieInfo {movie} />
+              <CardActions class="justify-center mt-6">
+                <Button outlined class="primary-text ">
+                  <Icon path={mdiCart} class="mr-3" />
+                  {messages.buttons.purchaseTicket.label}{movie.price}</Button
+                >
+              </CardActions>
+            </Card>
           </div>
-          <ul class="pa-2">
-            <li><b>Director</b>: {movie.director}</li>
-            <li><b>Main Cast</b>: {movie.actors}</li>
-            <li><b>Genre</b>: {movie.genre}</li>
-            <li><b>Running Time</b>: {movie.runtime}</li>
-            <li><b>Release Date</b>: {movie.released}</li>
-            <li><b>Language</b>: {movie.language}</li>
-            <li><b>Rating</b>: {movie.rating}</li>
-            <li><b>Metascore</b>: {movie.metascore}</li>
-          </ul>
-          <CardActions class="justify-center mt-6">
-            <Button outlined class="primary-text ">
-              <Icon path={mdiCart} class="mr-3" />
-              Purchase ticket for ${movie.price}</Button
-            >
-          </CardActions>
-        </Card>
-      {/each}
-    </div>
-  {:catch error}
-    <div class="d-flex flex-column align-center align-content-center">
-      <h2>AN ERROR OCCURED 😢</h2>
-      <h2>PLEASE RELOAD THE PAGE</h2>
-    </div>
+        {/each}
+      </div>
+    {/if}
+  {:catch}
+    <Error />
   {/await}
-
-  <div style="height: 200px;position:relative;">
-    <Footer padless class="justify-center flex-column" absolute>
-      <p class="pa-2">
-        Created by <a href="https://github.com/eubelov">Evgeny Belov</a>
-      </p>
-    </Footer>
-  </div>
 </MaterialApp>
 
 <style>
@@ -85,23 +135,10 @@
     height: 450px;
   }
 
-  h2 {
-    color: #ff3e00;
-    text-transform: uppercase;
-    font-size: 2em;
-    font-weight: 300;
-  }
-
-  h4 {
+  h4.movie-title {
     color: #ff3e00;
     text-transform: uppercase;
     font-size: 1em;
     font-weight: 400;
-  }
-
-  ul {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
   }
 </style>
